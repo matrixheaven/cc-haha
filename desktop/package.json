@@ -14,11 +14,11 @@
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
-    "diff": "^7.0.0",
-    "highlight.js": "^11.11.1",
     "lucide-react": "^0.469.0",
     "marked": "^15.0.7",
+    "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
+    "react-diff-viewer-continued": "^4.2.0",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.3"
   },
@@ -27,7 +27,6 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
-    "@types/diff": "^7.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
