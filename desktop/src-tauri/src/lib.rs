@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tauri::{path::BaseDirectory, AppHandle, Manager, RunEvent, State};
+use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
     ShellExt,
@@ -72,17 +72,30 @@ fn wait_for_server(url_host: &str, port: u16) -> Result<(), String> {
     ))
 }
 
-fn resolve_app_root(app: &AppHandle) -> Result<PathBuf, String> {
-    if cfg!(debug_assertions) {
-        return PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .map_err(|err| format!("resolve development app root: {err}"));
-    }
-
-    app.path()
-        .resolve("app", BaseDirectory::Resource)
-        .map_err(|err| format!("resolve bundled app root: {err}"))
+fn resolve_app_root(_app: &AppHandle) -> Result<PathBuf, String> {
+    // 历史用途：此前 sidecar launcher 用 dynamic file:// import 加载磁盘上
+    // 的 src/server/index.ts 和 preload.ts，所以 Tauri 必须把整个 src/ +
+    // node_modules/ 当 Resource 一起 ship 到 .app/Contents/Resources/app/。
+    //
+    // 现在 launcher 改成静态 import + bun build --compile 整棵静态打进二进制，
+    // server / cli sidecar 不再读磁盘上的 src/ 或 node_modules/。CLAUDE_APP_ROOT
+    // 现在只剩一个名义上的"app 安装根目录"作用，给 conversationService
+    // 在 spawn CLI 子进程时通过 --app-root 透传。
+    //
+    // 我们直接用当前可执行文件所在目录作为 app_root：
+    //   Dev:  desktop/src-tauri/target/<profile>/  （rust 跑出来的 binary 那一层）
+    //   Prod: <App>.app/Contents/MacOS/             （sidecar 二进制的同级目录）
+    //
+    // 这样 P0 不再依赖 BaseDirectory::Resource 解出的 app/ 目录，可以从
+    // tauri.conf.json 的 resources 里把 src/、node_modules/、preload.ts、stubs/
+    // 全部干掉，直接砍掉 ~300MB 包体。
+    let exe = std::env::current_exe()
+        .map_err(|err| format!("resolve current exe path: {err}"))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "current exe has no parent dir".to_string())?
+        .to_path_buf();
+    Ok(dir)
 }
 
 fn start_server_sidecar(app: &AppHandle) -> Result<ServerRuntime, String> {
