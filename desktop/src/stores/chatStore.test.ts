@@ -274,6 +274,47 @@ describe('chatStore history mapping', () => {
       providerId: 'provider-1',
       modelId: 'kimi-k2.6',
     })
+    expect(sendMock.mock.calls.slice(0, 2)).toEqual([
+      [
+        TEST_SESSION_ID,
+        {
+          type: 'set_runtime_config',
+          providerId: 'provider-1',
+          modelId: 'kimi-k2.6',
+        },
+      ],
+      [TEST_SESSION_ID, { type: 'prewarm_session' }],
+    ])
+  })
+
+  it('prewarms regular desktop sessions when connecting', () => {
+    useChatStore.getState().connectToSession(TEST_SESSION_ID)
+
+    expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
+      type: 'prewarm_session',
+    })
+  })
+
+  it('does not prewarm team member sessions', () => {
+    getMemberBySessionIdMock.mockReturnValue({
+      agentId: 'reviewer@test-team',
+      role: 'reviewer',
+      status: 'running',
+    })
+
+    useChatStore.getState().connectToSession(TEST_SESSION_ID)
+
+    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, {
+      type: 'prewarm_session',
+    })
+  })
+
+  it('does not prewarm synthetic app tabs', () => {
+    useChatStore.getState().connectToSession('__settings__')
+
+    expect(sendMock).not.toHaveBeenCalledWith('__settings__', {
+      type: 'prewarm_session',
+    })
   })
 
   it('sends explicit runtime overrides over websocket', () => {

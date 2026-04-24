@@ -272,6 +272,19 @@ describe('WebSocket Chat Integration', () => {
 
     return messages
   }
+
+  async function waitUntil(
+    predicate: () => boolean | Promise<boolean>,
+    label: string,
+    timeoutMs = 8000,
+  ): Promise<void> {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await predicate()) return
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error(`Timed out waiting for ${label}`)
+  }
   const originalCliPath = process.env.CLAUDE_CLI_PATH
 
   beforeAll(async () => {
@@ -504,6 +517,123 @@ describe('WebSocket Chat Integration', () => {
     expect(secondTurn.some((m) => m.type === 'message_complete')).toBe(true)
     expect(secondTurn.some((m) => m.type === 'error')).toBe(false)
   })
+
+  it('should prewarm the CLI before the first user turn and reuse that process', async () => {
+    const createRes = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workDir: process.cwd() }),
+    })
+    expect(createRes.status).toBe(201)
+    const { sessionId } = await createRes.json() as { sessionId: string }
+
+    const originalStartSession = conversationService.startSession.bind(conversationService)
+    const startCalls: Array<{ sessionId: string }> = []
+
+    conversationService.startSession = (async function patchedStartSession(
+      sid: string,
+      workDir: string,
+      sdkUrl: string,
+      options?: { permissionMode?: string; model?: string; effort?: string; providerId?: string | null },
+    ) {
+      startCalls.push({ sessionId: sid })
+      return originalStartSession(sid, workDir, sdkUrl, options)
+    }) as typeof conversationService.startSession
+
+    const messages: any[] = []
+    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    let connected = false
+    let awaitingCompletion = false
+    let preUserMessageCount = 0
+    let resolveCompletion: (() => void) | null = null
+    let rejectCompletion: ((err: Error) => void) | null = null
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timed out waiting for prewarm connection for session ${sessionId}`))
+        }, 5000)
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data as string)
+          messages.push(msg)
+
+          if (msg.type === 'connected' && !connected) {
+            connected = true
+            clearTimeout(timeout)
+            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+            resolve()
+            return
+          }
+
+          if (msg.type === 'error') {
+            const err = new Error(msg.message)
+            clearTimeout(timeout)
+            rejectCompletion?.(err)
+            reject(err)
+            return
+          }
+
+          if (awaitingCompletion && msg.type === 'message_complete') {
+            resolveCompletion?.()
+          }
+        }
+
+        ws.onerror = () => {
+          const err = new Error(`WebSocket error for prewarm session ${sessionId}`)
+          clearTimeout(timeout)
+          rejectCompletion?.(err)
+          reject(err)
+        }
+      })
+
+      await waitUntil(
+        () => startCalls.length === 1 && conversationService.hasSession(sessionId),
+        `prewarmed CLI process for ${sessionId}`,
+      )
+      await waitUntil(async () => {
+        const commandsRes = await fetch(`${baseUrl}/api/sessions/${sessionId}/slash-commands`)
+        if (!commandsRes.ok) return false
+        const { commands } = await commandsRes.json() as { commands?: Array<{ name: string }> }
+        if (!Array.isArray(commands)) return false
+        return commands.some((command) => command.name === 'help')
+      }, `prewarmed slash commands for ${sessionId}`)
+
+      preUserMessageCount = messages.length
+      expect(
+        messages
+          .slice(0, preUserMessageCount)
+          .some((msg) => ['content_start', 'content_delta', 'thinking', 'message_complete'].includes(msg.type)),
+      ).toBe(false)
+
+      awaitingCompletion = true
+      const completion = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timed out waiting for completion after prewarm for session ${sessionId}`))
+        }, 10_000)
+        resolveCompletion = () => {
+          clearTimeout(timeout)
+          resolve()
+        }
+        rejectCompletion = (err) => {
+          clearTimeout(timeout)
+          reject(err)
+        }
+      })
+
+      ws.send(JSON.stringify({ type: 'user_message', content: 'first turn after prewarm' }))
+      await completion
+
+      expect(startCalls).toHaveLength(1)
+      expect(messages.some((msg) => msg.type === 'content_delta')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'error')).toBe(false)
+    } finally {
+      ws.close()
+      conversationService.startSession = originalStartSession
+      conversationService.stopSession(sessionId)
+    }
+  }, 20_000)
 
   it('should resume streaming to a reconnected client during an active turn', async () => {
     await withMockStreamDelay(150, async () => {

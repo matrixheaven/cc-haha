@@ -232,6 +232,10 @@ export class ConversationService {
     }
   }
 
+  getRecentSdkMessages(sessionId: string): any[] {
+    return [...(this.sessions.get(sessionId)?.sdkMessages ?? [])]
+  }
+
   sendMessage(
     sessionId: string,
     content: string,
@@ -564,6 +568,12 @@ export class ConversationService {
         : {}),
       ...(desktopServerUrl
         ? { CC_HAHA_DESKTOP_SERVER_URL: desktopServerUrl }
+        : {}),
+      ...(sdkUrl
+        ? {
+            CC_HAHA_DESKTOP_AWAIT_MCP: '1',
+            CC_HAHA_DESKTOP_AWAIT_MCP_TIMEOUT_MS: '5000',
+          }
         : {}),
       // Tell the CLI entrypoint to skip project .env loading. Provider env
       // should come from Desktop-managed config or inherited launch env, not

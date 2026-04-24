@@ -118,9 +118,27 @@ function McpPanel({ cwd, onClose }: { cwd?: string; onClose: () => void }) {
   useEffect(() => {
     let cancelled = false
     mcpApi.list(cwd)
-      .then((response) => {
+      .then(async (response) => {
         if (cancelled) return
-        setServers(response.servers.filter((server) => server.scope === 'user' || server.scope === 'local' || server.scope === 'project'))
+        const visibleServers = response.servers.filter((server) => server.scope === 'user' || server.scope === 'local' || server.scope === 'project')
+        setServers(visibleServers)
+
+        const statusResults = await Promise.allSettled(
+          visibleServers.map((server) => mcpApi.status(server.name, cwd)),
+        )
+        if (cancelled) return
+
+        const liveServers = new Map<string, McpServerRecord>()
+        for (const result of statusResults) {
+          if (result.status === 'fulfilled') {
+            liveServers.set(result.value.server.name, result.value.server)
+          }
+        }
+        if (liveServers.size > 0) {
+          setServers((current) =>
+            current?.map((server) => liveServers.get(server.name) ?? server) ?? current,
+          )
+        }
       })
       .catch((err) => {
         if (cancelled) return

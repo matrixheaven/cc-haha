@@ -6,6 +6,7 @@ import type { RuntimeSelection } from './runtime'
 // ─── Client → Server ──────────────────────────────────────────────
 
 export type ClientMessage =
+  | { type: 'prewarm_session' }
   | { type: 'user_message'; content: string; attachments?: AttachmentRef[] }
   | {
       type: 'permission_response'

@@ -15,6 +15,23 @@ vi.mock('../api/skills', () => ({
 vi.mock('../api/mcp', () => ({
   mcpApi: {
     list: vi.fn(async () => ({ servers: [] })),
+    status: vi.fn(async (name: string) => ({
+      server: {
+        name,
+        scope: 'user',
+        transport: 'http',
+        enabled: true,
+        status: 'connected',
+        statusLabel: 'Connected',
+        configLocation: 'User',
+        summary: 'https://mcp.example.com/mcp',
+        canEdit: true,
+        canRemove: true,
+        canReconnect: true,
+        canToggle: true,
+        config: { type: 'http', url: 'https://mcp.example.com/mcp', headers: {} },
+      },
+    })),
   },
 }))
 

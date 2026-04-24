@@ -55,6 +55,11 @@ const runtimeOverrides = new Map<string, {
 }>()
 
 const runtimeTransitionPromises = new Map<string, Promise<void>>()
+const sessionStartupPromises = new Map<string, Promise<void>>()
+const prewarmPendingSessions = new Set<string>()
+const prewarmedSessions = new Set<string>()
+const prewarmIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const DEFAULT_PREWARM_IDLE_TIMEOUT_MS = 5 * 60_000
 
 export function getSlashCommands(sessionId: string): Array<{ name: string; description: string }> {
   return sessionSlashCommands.get(sessionId) || []
@@ -98,7 +103,11 @@ export const handleWebSocket = {
     }
 
     activeSessions.set(sessionId, ws)
-    rebindSessionOutput(sessionId, ws)
+    if (prewarmedSessions.has(sessionId)) {
+      bindPrewarmMetadataCapture(sessionId)
+    } else {
+      rebindSessionOutput(sessionId, ws)
+    }
 
     const msg: ServerMessage = { type: 'connected', sessionId }
     ws.send(JSON.stringify(msg))
@@ -137,6 +146,10 @@ export const handleWebSocket = {
 
         case 'set_runtime_config':
           void handleSetRuntimeConfig(ws, message)
+          break
+
+        case 'prewarm_session':
+          handlePrewarmSession(ws)
           break
 
         case 'stop_generation':
@@ -196,10 +209,10 @@ async function handleUserMessage(
   message: Extract<ClientMessage, { type: 'user_message' }>
 ) {
   const { sessionId } = ws.data
-  let workDir = os.homedir()
 
   // Clear any stale stop flag from a previous turn
   sessionStopRequested.delete(sessionId)
+  clearPrewarmState(sessionId)
 
   // Send thinking status
   sendMessage(ws, { type: 'status', state: 'thinking', verb: 'Thinking' })
@@ -222,45 +235,22 @@ async function handleUserMessage(
   }
 
   // 启动 CLI 子进程（如果还没有）
-  if (!conversationService.hasSession(sessionId)) {
-    try {
-      // Resolve the session's actual working directory
-      try {
-        const resolved = await sessionService.getSessionWorkDir(sessionId)
-        if (resolved) workDir = resolved
-        console.log(
-          `[WS] handleUserMessage: sessionId=${sessionId}, resolved workDir=${JSON.stringify(
-            resolved,
-          )}, will spawn CLI with workDir=${workDir}`,
-        )
-      } catch (resolveErr) {
-        // fallback to cwd if session file not found
-        console.warn(
-          `[WS] handleUserMessage: failed to resolve workDir for ${sessionId}, using fallback=${workDir}: ${
-            resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
-          }`,
-        )
-      }
-      const runtimeSettings = await getRuntimeSettings(sessionId)
-      const sdkUrl =
-        `ws://${ws.data.serverHost}:${ws.data.serverPort}/sdk/${sessionId}` +
-        `?token=${encodeURIComponent(crypto.randomUUID())}`
-      await conversationService.startSession(sessionId, workDir, sdkUrl, runtimeSettings)
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err)
-      const code =
-        err instanceof ConversationStartupError ? err.code : 'CLI_START_FAILED'
-      console.error(`[WS] CLI start failed for ${sessionId}: ${errMsg}`)
-      sendMessage(ws, {
-        type: 'error',
-        message: errMsg,
-        code,
-        retryable:
-          err instanceof ConversationStartupError ? err.retryable : false,
-      })
-      sendMessage(ws, { type: 'status', state: 'idle' })
-      return
-    }
+  try {
+    await ensureCliSessionStarted(ws, sessionId, 'user_message')
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    const code =
+      err instanceof ConversationStartupError ? err.code : 'CLI_START_FAILED'
+    console.error(`[WS] CLI start failed for ${sessionId}: ${errMsg}`)
+    sendMessage(ws, {
+      type: 'error',
+      message: errMsg,
+      code,
+      retryable:
+        err instanceof ConversationStartupError ? err.retryable : false,
+    })
+    sendMessage(ws, { type: 'status', state: 'idle' })
+    return
   }
 
   // Track user message for title generation
@@ -300,6 +290,29 @@ async function handleUserMessage(
   }
 
   userMessageSent = true
+}
+
+function handlePrewarmSession(ws: ServerWebSocket<WebSocketData>) {
+  const { sessionId } = ws.data
+  if (conversationService.hasSession(sessionId) || sessionStartupPromises.has(sessionId)) {
+    return
+  }
+
+  prewarmPendingSessions.add(sessionId)
+  void ensureCliSessionStarted(ws, sessionId, 'prewarm_session')
+    .then(() => {
+      if (!prewarmPendingSessions.delete(sessionId)) return
+      bindPrewarmMetadataCapture(sessionId)
+      markPrewarmed(sessionId)
+    })
+    .catch((err) => {
+      prewarmPendingSessions.delete(sessionId)
+      console.warn(
+        `[WS] Prewarm failed for ${sessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    })
 }
 
 function handlePermissionResponse(
@@ -575,6 +588,120 @@ function cleanupSessionRuntimeState(sessionId: string) {
   sessionTitleState.delete(sessionId)
   runtimeOverrides.delete(sessionId)
   runtimeTransitionPromises.delete(sessionId)
+  sessionStartupPromises.delete(sessionId)
+  clearPrewarmState(sessionId)
+}
+
+function getPrewarmIdleTimeoutMs(): number {
+  const raw = process.env.CC_HAHA_PREWARM_IDLE_TIMEOUT_MS
+  if (!raw) return DEFAULT_PREWARM_IDLE_TIMEOUT_MS
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_PREWARM_IDLE_TIMEOUT_MS
+}
+
+function clearPrewarmState(sessionId: string) {
+  prewarmPendingSessions.delete(sessionId)
+  prewarmedSessions.delete(sessionId)
+  const timer = prewarmIdleTimers.get(sessionId)
+  if (timer) {
+    clearTimeout(timer)
+    prewarmIdleTimers.delete(sessionId)
+  }
+}
+
+function markPrewarmed(sessionId: string) {
+  prewarmedSessions.add(sessionId)
+  const timeoutMs = getPrewarmIdleTimeoutMs()
+  if (timeoutMs === 0) return
+
+  const existingTimer = prewarmIdleTimers.get(sessionId)
+  if (existingTimer) clearTimeout(existingTimer)
+
+  const timer = setTimeout(() => {
+    prewarmIdleTimers.delete(sessionId)
+    if (!prewarmedSessions.has(sessionId)) return
+    console.log(`[WS] Prewarmed session ${sessionId} idle for ${timeoutMs}ms, stopping CLI subprocess`)
+    conversationService.stopSession(sessionId)
+    prewarmedSessions.delete(sessionId)
+  }, timeoutMs)
+  prewarmIdleTimers.set(sessionId, timer)
+}
+
+function cacheSessionInitMetadata(sessionId: string, cliMsg: any) {
+  if (cliMsg?.type !== 'system' || cliMsg.subtype !== 'init') return
+  if (cliMsg.slash_commands && Array.isArray(cliMsg.slash_commands)) {
+    sessionSlashCommands.set(sessionId, cliMsg.slash_commands.map((cmd: any) => ({
+      name: typeof cmd === 'string' ? cmd : (cmd.name || cmd.command || ''),
+      description: typeof cmd === 'string' ? '' : (cmd.description || ''),
+    })))
+  }
+}
+
+function bindPrewarmMetadataCapture(sessionId: string) {
+  for (const msg of conversationService.getRecentSdkMessages(sessionId)) {
+    cacheSessionInitMetadata(sessionId, msg)
+  }
+  if (!conversationService.hasSession(sessionId)) return
+
+  conversationService.clearOutputCallbacks(sessionId)
+  conversationService.onOutput(sessionId, (cliMsg) => {
+    cacheSessionInitMetadata(sessionId, cliMsg)
+  })
+}
+
+async function resolveSessionWorkDir(sessionId: string, fallback = os.homedir()): Promise<string> {
+  let workDir = fallback
+  try {
+    const resolved = await sessionService.getSessionWorkDir(sessionId)
+    if (resolved) workDir = resolved
+    console.log(
+      `[WS] resolveSessionWorkDir: sessionId=${sessionId}, resolved workDir=${JSON.stringify(
+        resolved,
+      )}, will spawn CLI with workDir=${workDir}`,
+    )
+  } catch (resolveErr) {
+    console.warn(
+      `[WS] resolveSessionWorkDir: failed to resolve workDir for ${sessionId}, using fallback=${workDir}: ${
+        resolveErr instanceof Error ? resolveErr.message : String(resolveErr)
+      }`,
+    )
+  }
+  return workDir
+}
+
+async function ensureCliSessionStarted(
+  ws: ServerWebSocket<WebSocketData>,
+  sessionId: string,
+  reason: 'user_message' | 'prewarm_session',
+): Promise<void> {
+  const pendingStartup = sessionStartupPromises.get(sessionId)
+  if (pendingStartup) {
+    await pendingStartup
+    return
+  }
+
+  if (conversationService.hasSession(sessionId)) return
+
+  const startup = (async () => {
+    const workDir = await resolveSessionWorkDir(sessionId)
+    const runtimeSettings = await getRuntimeSettings(sessionId)
+    const sdkUrl =
+      `ws://${ws.data.serverHost}:${ws.data.serverPort}/sdk/${sessionId}` +
+      `?token=${encodeURIComponent(crypto.randomUUID())}`
+    console.log(`[WS] Starting CLI for ${sessionId} due to ${reason}`)
+    await conversationService.startSession(sessionId, workDir, sdkUrl, runtimeSettings)
+  })()
+
+  sessionStartupPromises.set(sessionId, startup)
+  try {
+    await startup
+  } finally {
+    if (sessionStartupPromises.get(sessionId) === startup) {
+      sessionStartupPromises.delete(sessionId)
+    }
+  }
 }
 
 function translateCliMessage(cliMsg: any, sessionId: string): ServerMessage[] {
@@ -844,12 +971,7 @@ function translateCliMessage(cliMsg: any, sessionId: string): ServerMessage[] {
         // NOTE: Do NOT send status:idle here — the CLI init fires while
         // processing the first user message, and sending idle would reset
         // the frontend's streaming state prematurely.
-        if (cliMsg.slash_commands && Array.isArray(cliMsg.slash_commands)) {
-          sessionSlashCommands.set(sessionId, cliMsg.slash_commands.map((cmd: any) => ({
-            name: typeof cmd === 'string' ? cmd : (cmd.name || cmd.command || ''),
-            description: typeof cmd === 'string' ? '' : (cmd.description || ''),
-          })))
-        }
+        cacheSessionInitMetadata(sessionId, cliMsg)
         const messages: ServerMessage[] = [
           // Send model info as a system notification, not a status change
           { type: 'system_notification', subtype: 'init', message: `Model: ${cliMsg.model || 'unknown'}`, data: { model: cliMsg.model } },

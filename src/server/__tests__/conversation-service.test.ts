@@ -249,6 +249,17 @@ describe('ConversationService', () => {
     expect(args).toContain('--replay-user-messages')
   })
 
+  test('buildChildEnv asks desktop SDK sessions to wait briefly for MCP tools', async () => {
+    const service = new ConversationService() as any
+    const env = (await service.buildChildEnv(
+      '/tmp',
+      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+    )) as Record<string, string>
+
+    expect(env.CC_HAHA_DESKTOP_AWAIT_MCP).toBe('1')
+    expect(env.CC_HAHA_DESKTOP_AWAIT_MCP_TIMEOUT_MS).toBe('5000')
+  })
+
   test('buildSessionCliArgs forwards the selected runtime model and effort to the CLI process', () => {
     const service = new ConversationService() as any
     const args = service.buildSessionCliArgs(

@@ -29,8 +29,9 @@ export function AppShell() {
 
         // Restore tabs from localStorage
         await useTabStore.getState().restoreTabs()
-        const activeId = useTabStore.getState().activeTabId
-        if (activeId) {
+        const { activeTabId: activeId, tabs } = useTabStore.getState()
+        const activeTab = tabs.find((tab) => tab.sessionId === activeId)
+        if (activeId && activeTab?.type === 'session') {
           useChatStore.getState().connectToSession(activeId)
         }
         if (!cancelled) {
