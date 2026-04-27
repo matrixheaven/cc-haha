@@ -17,8 +17,6 @@
         "./src/*"
       ]
     },
-    "types": [
-      "bun-types"
-    ]
+    "types": []
   }
 }

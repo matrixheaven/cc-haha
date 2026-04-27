@@ -32,3 +32,10 @@ export const markToolsSentToAPI = stub
 export const resetCachedMCState = stub
 export const checkProtectedNamespace = stub
 export const getCoordinatorUserContext = stub
+export const Message = stub
+export const Attachment = stub
+export const AttachmentType = stub
+// Type-level exports for import type consumers
+export type Message = any
+export type Attachment = any
+export type AttachmentType = any

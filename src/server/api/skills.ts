@@ -146,7 +146,9 @@ async function buildFileTree(
 
     // directories first, then alphabetical
     entries.sort((a, b) => {
-      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
+      const aIsDir = a.isDirectory() || a.isSymbolicLink()
+      const bIsDir = b.isDirectory() || b.isSymbolicLink()
+      if (aIsDir !== bIsDir) return aIsDir ? -1 : 1
       return a.name.localeCompare(b.name)
     })
 
@@ -157,7 +159,20 @@ async function buildFileTree(
       const fullPath = path.join(currentPath, entry.name)
       const relPath = path.relative(dirPath, fullPath)
 
-      if (entry.isDirectory()) {
+      let isDir = entry.isDirectory()
+      let isFile = entry.isFile()
+
+      if (entry.isSymbolicLink()) {
+        try {
+          const stat = await fs.stat(fullPath)
+          isDir = stat.isDirectory()
+          isFile = stat.isFile()
+        } catch {
+          continue
+        }
+      }
+
+      if (isDir) {
         const node: FileTreeNode = {
           name: entry.name,
           path: relPath,
@@ -167,7 +182,7 @@ async function buildFileTree(
         nodes.push(node)
         await walk(fullPath, node.children!)
         if (node.children!.length === 0) delete node.children
-      } else if (entry.isFile()) {
+      } else if (isFile) {
         nodes.push({ name: entry.name, path: relPath, type: 'file' })
 
         try {
@@ -224,7 +239,7 @@ async function collectSkillsFromRoots(
     }
 
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.') || seenNames.has(entry.name)) {
+      if ((!entry.isDirectory() && !entry.isSymbolicLink()) || entry.name.startsWith('.') || seenNames.has(entry.name)) {
         continue
       }
 

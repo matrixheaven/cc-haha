@@ -134,6 +134,9 @@ async function compileExecutable({
       'fflate',
       'sharp',
       'react-devtools-core',
+      // IM 适配器（仅 adapters 模式需要，由用户自行安装）
+      'grammy',
+      '@larksuiteoapi/node-sdk',
     ],
     compile: {
       target: bunTarget,

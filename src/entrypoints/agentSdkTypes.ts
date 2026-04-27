@@ -35,7 +35,6 @@ export * from './sdk/toolTypes.js'
 // ============================================================================
 
 import type {
-  SDKMessage,
   SDKResultMessage,
   SDKSessionInfo,
   SDKUserMessage,
@@ -399,7 +398,7 @@ export type RemoteControlHandle = {
   sessionUrl: string
   environmentId: string
   bridgeSessionId: string
-  write(msg: SDKMessage): void
+  write(msg: SDKControlRequest): void
   sendResult(): void
   sendControlRequest(req: unknown): void
   sendControlResponse(res: unknown): void
