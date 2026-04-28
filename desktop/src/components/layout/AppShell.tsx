@@ -6,12 +6,14 @@ import { UpdateChecker } from '../shared/UpdateChecker'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useUIStore, type SettingsTab } from '../../stores/uiStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
-import { initializeDesktopServerUrl } from '../../lib/desktopRuntime'
+import { initializeDesktopServerUrl, initializeDesktopServerUrlAsync } from '../../lib/desktopRuntime'
 import { TabBar } from './TabBar'
 import { StartupErrorView } from './StartupErrorView'
 import { useTabStore, SETTINGS_TAB_ID } from '../../stores/tabStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useTranslation } from '../../i18n'
+import { useAuthStore, isRemoteAccess } from '../../stores/authStore'
+import { LoginPage } from '../../pages/LoginPage'
 
 export function AppShell() {
   const fetchSettings = useSettingsStore((s) => s.fetchAll)
@@ -19,16 +21,28 @@ export function AppShell() {
   const [ready, setReady] = useState(false)
   const [startupError, setStartupError] = useState<string | null>(null)
   const t = useTranslation()
+  const { isLoggedIn, checkAuth } = useAuthStore()
+  const isRemote = isRemoteAccess()
+
+  // Sync init: set baseUrl immediately (no async, no health check)
+  initializeDesktopServerUrl()
 
   useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
+
+  useEffect(() => {
+    // In remote access mode, skip bootstrap until logged in
+    if (isRemote && !isLoggedIn) return
+
     let cancelled = false
 
     const bootstrap = async () => {
       try {
-        await initializeDesktopServerUrl()
+        // Tauri needs async invoke; local/remote is already initialized sync
+        await initializeDesktopServerUrlAsync()
         await fetchSettings()
 
-        // Restore tabs from localStorage
         await useTabStore.getState().restoreTabs()
         const { activeTabId: activeId, tabs } = useTabStore.getState()
         const activeTab = tabs.find((tab) => tab.sessionId === activeId)
@@ -51,7 +65,7 @@ export function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [fetchSettings])
+  }, [fetchSettings, isRemote, isLoggedIn])
 
   // Listen for macOS native menu navigation events (About / Settings)
   useEffect(() => {
@@ -75,6 +89,11 @@ export function AppShell() {
 
   if (startupError) {
     return <StartupErrorView error={startupError} />
+  }
+
+  // Remote access without login: show login page immediately
+  if (isRemote && !isLoggedIn) {
+    return <LoginPage />
   }
 
   if (!ready) {

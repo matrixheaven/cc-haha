@@ -34,11 +34,21 @@ function resolveServerOptions() {
   const cliPath = readArgValue('--cli-path')
   const authRequired = hasArgFlag('--auth-required')
 
+  // Remote access CLI overrides
+  const remoteHost = readArgValue('--remote-host')
+  const remotePortArg = readArgValue('--remote-port')
+  const remotePort = remotePortArg ? Number.parseInt(remotePortArg, 10) : undefined
+  const remoteEnabled = hasArgFlag('--remote-enabled')
+
   if (cliPath) {
     process.env.CLAUDE_CLI_PATH = cliPath
   }
 
-  return { port, host, authRequired }
+  return { port, host, authRequired, remoteHost, remotePort, remoteEnabled }
+}
+
+export function getServerOptions() {
+  return SERVER_OPTIONS
 }
 
 const SERVER_OPTIONS = resolveServerOptions()
@@ -225,6 +235,30 @@ export function startServer(port = PORT, host = HOST) {
       error instanceof Error ? error.message : error,
     )
   })
+
+  // Start remote access server if enabled (CLI overrides take precedence)
+  const localUrl = `http://${localConnectHost}:${port}`
+  const remoteOverrides: { host?: string; port?: number } = {}
+  if (SERVER_OPTIONS.remoteHost) remoteOverrides.host = SERVER_OPTIONS.remoteHost
+  if (SERVER_OPTIONS.remotePort) remoteOverrides.port = SERVER_OPTIONS.remotePort
+  if (SERVER_OPTIONS.remoteEnabled) {
+    // Force-enable from CLI
+    import('./services/remoteAccessService.js').then(({ remoteAccessService }) => {
+      remoteAccessService.saveConfig({ enabled: true }).then(() => {
+        import('./remoteServer.js').then(({ startRemoteServer }) => {
+          startRemoteServer(localUrl, remoteOverrides).catch((err) => {
+            console.error('[Remote] Failed to start remote server:', err)
+          })
+        })
+      })
+    })
+  } else {
+    import('./remoteServer.js').then(({ startRemoteServer }) => {
+      startRemoteServer(localUrl, remoteOverrides).catch((err) => {
+        console.error('[Remote] Failed to start remote server:', err)
+      })
+    })
+  }
 
   console.log(`[Server] Claude Code API server running at http://${host}:${port}`)
   return server

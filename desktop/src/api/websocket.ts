@@ -40,7 +40,9 @@ class WebSocketManager {
     }
 
     const wsUrl = getBaseUrl().replace(/^http/, 'ws')
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cc-haha-remote-auth') : null
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : ''
+    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}${tokenQuery}`)
 
     const conn: Connection = {
       ws,

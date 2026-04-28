@@ -19,6 +19,7 @@ import { handleSkillsApi } from './api/skills.js'
 import { handleComputerUseApi } from './api/computer-use.js'
 import { handleHahaOAuthApi } from './api/haha-oauth.js'
 import { handleMcpApi } from './api/mcp.js'
+import { handleRemoteAuthApi } from './api/remote-auth.js'
 
 export async function handleApiRequest(req: Request, url: URL): Promise<Response> {
   const path = url.pathname
@@ -28,6 +29,9 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
   const resource = segments[1]
 
   switch (resource) {
+    case 'auth':
+      return handleRemoteAuthApi(req, url, segments)
+
     case 'sessions': {
       // Route /api/sessions/:id/chat/* to conversations handler
       const subResource = segments[3]

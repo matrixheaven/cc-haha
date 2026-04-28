@@ -5,56 +5,45 @@ export function isTauriRuntime() {
   return '__TAURI_INTERNALS__' in window || '__TAURI__' in window
 }
 
-export async function initializeDesktopServerUrl() {
+/** Synchronously initialize the server URL. Returns immediately. */
+export function initializeDesktopServerUrl() {
+  if (isTauriRuntime()) {
+    // Tauri runtime: URL set by invoke() — defer to the existing async flow
+    return
+  }
+
+  if (typeof window === 'undefined') return
+
+  const queryUrl = new URLSearchParams(window.location.search).get('serverUrl')?.trim()
+  const host = window.location.hostname
+
+  // Remote access mode: API is on the same origin as the page
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
+    setBaseUrl(window.location.origin)
+    return
+  }
+
+  // Local dev: use the query param or the default
+  setBaseUrl(queryUrl || getDefaultBaseUrl())
+}
+
+// Separate async bootstrap for Tauri (needs invoke)
+export async function initializeDesktopServerUrlAsync() {
   const fallbackUrl = getDefaultBaseUrl()
-  const queryUrl =
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('serverUrl')
-      : null
-  const requestedUrl = queryUrl?.trim() || fallbackUrl
 
   if (!isTauriRuntime()) {
-    setBaseUrl(requestedUrl)
-    await waitForHealth(requestedUrl)
-    return requestedUrl
+    initializeDesktopServerUrl()
+    return
   }
 
   try {
     const { invoke } = await import(/* @vite-ignore */ '@tauri-apps/api/core')
     const serverUrl = await invoke<string>('get_server_url')
     setBaseUrl(serverUrl)
-    await waitForHealth(serverUrl)
-    return serverUrl
   } catch (error) {
     const message =
       error instanceof Error ? error.message : `desktop server startup failed: ${String(error)}`
     console.error('[desktop] Failed to initialize desktop server URL', error)
     throw new Error(message || `desktop server startup failed (fallback would be ${fallbackUrl})`)
   }
-}
-
-async function waitForHealth(serverUrl: string) {
-  let lastError: unknown
-
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      const response = await fetch(`${serverUrl}/health`, {
-        cache: 'no-store',
-      })
-      if (response.ok) {
-        return
-      }
-      lastError = new Error(`healthcheck returned ${response.status}`)
-    } catch (error) {
-      lastError = error
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-
-  throw new Error(
-    lastError instanceof Error
-      ? `Local server healthcheck failed: ${lastError.message}`
-      : 'Local server healthcheck failed',
-  )
 }

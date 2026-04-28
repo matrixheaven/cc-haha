@@ -463,6 +463,23 @@ export const en = {
   'settings.computerUse.flagClipboard': 'Clipboard Access',
   'settings.computerUse.flagSystemKeys': 'System Key Combos',
 
+  // Settings > Remote Access
+  'settings.tab.remoteAccess': 'Remote Access',
+  'settings.remoteAccess.title': 'Remote Access',
+  'settings.remoteAccess.description': 'Allow other devices on the same local network to access this desktop app via a browser.',
+  'settings.remoteAccess.enable': 'Enable remote access',
+  'settings.remoteAccess.enableHint': 'Takes effect immediately. Other devices on the same network can access this app.',
+  'settings.remoteAccess.host': 'Bind address',
+  'settings.remoteAccess.hostHint': 'Default 0.0.0.0 (all interfaces). Use a specific IP like 192.168.1.100 to restrict.',
+  'settings.remoteAccess.port': 'Listening port',
+  'settings.remoteAccess.portHint': 'Default 8080. Takes effect immediately.',
+  'settings.remoteAccess.setPassword': 'Set access password',
+  'settings.remoteAccess.resetPassword': 'Reset access password',
+  'settings.remoteAccess.passwordPlaceholder': 'Enter at least 6 characters',
+  'settings.remoteAccess.passwordHint': 'Required for remote devices to access this app.',
+  'settings.remoteAccess.status': 'Remote access is active',
+  'settings.remoteAccess.statusHint': 'Server running at http://{host}:{port}. Changes take effect immediately.',
+
   // Settings > General
   'settings.general.appearanceTitle': 'Appearance',
   'settings.general.appearanceDescription': 'Switch between the original light workspace and the new dark workspace.',
@@ -480,6 +497,15 @@ export const en = {
   'settings.general.webFetchPreflightDescription': 'Desktop sessions skip Claude\'s domain preflight by default to avoid false failures on third-party providers and restricted networks.',
   'settings.general.webFetchPreflightEnabled': 'Skip WebFetch domain preflight',
   'settings.general.webFetchPreflightHint': 'Turn this off only if you explicitly want to restore the upstream safety preflight before each WebFetch request.',
+
+  // ─── Login ──────────────────────────────────────
+  'login.title': 'Claude Code Haha',
+  'login.subtitle': 'Enter access password to continue',
+  'login.password': 'Access password',
+  'login.passwordPlaceholder': 'Enter password',
+  'login.submit': 'Sign in',
+  'login.invalidPassword': 'Invalid password',
+  'login.remoteNotConfigured': 'Remote access is not configured',
 
   // ─── Empty Session ──────────────────────────────────────
   'empty.title': 'New session',

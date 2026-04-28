@@ -15,6 +15,13 @@ export type CliLauncherStatus = {
   lastError: string | null
 }
 
+export type RemoteAccessStatus = {
+  enabled: boolean
+  host: string
+  port: number
+  hasPassword: boolean
+}
+
 export const settingsApi = {
   getUser() {
     return api.get<UserSettings>('/api/settings/user')
@@ -34,5 +41,13 @@ export const settingsApi = {
 
   getCliLauncherStatus() {
     return api.get<CliLauncherStatus>('/api/settings/cli-launcher')
+  },
+
+  getRemoteAccess() {
+    return api.get<RemoteAccessStatus>('/api/settings/remote-access')
+  },
+
+  updateRemoteAccess(body: Partial<{ enabled: boolean; host: string; port: number; password: string }>) {
+    return api.put<{ ok: true }>('/api/settings/remote-access', body)
   },
 }

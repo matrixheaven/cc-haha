@@ -53,6 +53,35 @@ cd desktop && bun run dev --host 127.0.0.1 --port 2024
 
 Open `http://127.0.0.1:2024` in a browser. Use this for most UI, API, and logic changes.
 
+### Remote Access (LAN — serve to other devices)
+
+The desktop app can expose a remote access server on the LAN so phones/tablets/other computers can access it via a browser. The remote server binds to a configurable IP:port, serves the built frontend, proxies API/WebSocket to the local server, and enforces JWT login.
+
+**Two ways to start:**
+
+| Method | Command | Best for |
+|--------|---------|----------|
+| **Production** (built files) | `SERVER_PORT=3456 bun run src/server/index.ts --remote-enabled --remote-port 8080` | Full integration test, serves `desktop/dist/` |
+| **Dev with hot reload** | `SERVER_PORT=3456 bun run src/server/index.ts` + `cd desktop && bun run dev:remote` | UI iteration, no rebuild needed |
+
+**Important:** When using the production method, the remote server serves static files from `desktop/dist/`. After any frontend change, you MUST rebuild:
+
+```bash
+cd desktop && bun run build
+```
+
+The `dev:remote` method uses Vite's dev server (hot reload, no build step). LAN devices access `http://<host-ip>:1420`.
+
+**CLI flags for remote access:**
+
+| Flag | Description |
+|------|-------------|
+| `--remote-enabled` | Force-enable remote server (override config file) |
+| `--remote-host <ip>` | Bind address (default from config, typically `0.0.0.0`) |
+| `--remote-port <port>` | Listening port (default from config, typically `8080`) |
+
+**Settings UI path:** Settings → Remote Access tab. Configure bind address, port, and access password. Changes take effect immediately (server auto-restarts).
+
 ### Tauri native mode (full desktop app)
 
 Required when testing native features: built-in terminal (PTY), sidecar lifecycle, tray, auto-updater, or the final DMG shape. Has heavier prerequisites (Rust toolchain, Tauri CLI).

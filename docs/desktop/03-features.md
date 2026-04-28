@@ -217,6 +217,100 @@
 
 ---
 
+## 远程访问
+
+远程访问允许你通过局域网内的其他设备（手机、平板、其他电脑）的浏览器访问桌面端，无需在本机操作。
+
+### 架构
+
+远程访问采用**三轨端口制**：
+
+| 模式 | 绑定地址 | 用途 | 认证 |
+|------|----------|------|------|
+| **本地 API** | `127.0.0.1:<随机端口>` | Tauri WebView ↔ Sidecar | 无 |
+| **开发前端** | `localhost:1420` | Vite dev server | 无 |
+| **远程访问** | `0.0.0.0:<用户配置端口>` | 局域网浏览器访问 | **强制 JWT** |
+
+远程服务器由 Sidecar 在独立端口启动，负责：
+1. **Serve 静态文件** — `dist/` 目录下的前端产物
+2. **反向代理 API** — `/api/*`、`/proxy/*`、`/health` → 本地 API 服务器
+3. **WebSocket 透传** — `/ws/*`、`/sdk/*` → 本地 API 服务器
+4. **SPA Fallback** — 所有未匹配路径返回 `index.html`
+
+### 认证流程
+
+```
+首次开启远程访问
+    → Sidecar 生成随机 JWT Secret
+    → 用户设置访问密码
+    → 密码经 PBKDF2（100k 轮）+ 随机盐哈希后存储
+
+远程设备访问
+    → 浏览器打开 http://<ip>:<port>
+    → 前端检测到非本地访问，渲染登录页
+    → 输入密码 → POST /api/auth/remote-login
+    → 后端验证密码 → 签发 7 天有效期 JWT
+    → 前端存入 localStorage → 后续请求自动携带 Bearer Token
+    → WebSocket 连接携带 token query 参数
+```
+
+### 配置
+
+在**设置 → 远程访问**标签页中：
+
+- **启用开关** — 开启/关闭远程访问，即时生效（服务器动态启停）
+- **绑定地址** — 默认 `0.0.0.0`（监听所有网卡），可改为具体 IP 如 `192.168.1.100`
+- **监听端口** — 默认 8080，修改后即时生效
+- **访问密码** — 设置/重置密码，远程设备访问时需输入
+
+配置变更会立即触发后端服务器重启，无需手动重启应用。
+
+### CLI 示例
+
+可通过命令行参数覆盖配置或强制启用：
+
+```bash
+# 由配置文件决定是否启用（Settings 页面控制）
+SERVER_PORT=3456 bun run src/server/index.ts
+
+# 强制启用远程访问并指定 IP 和端口
+SERVER_PORT=3456 bun run src/server/index.ts --remote-enabled --remote-host 192.168.1.100 --remote-port 8080
+
+# 仅指定远程端口
+SERVER_PORT=3456 bun run src/server/index.ts --remote-port 9999
+```
+
+支持的远程访问 CLI 参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--remote-enabled` | 强制启用远程服务器（覆盖配置文件） |
+| `--remote-host <ip>` | 远程服务器绑定地址 |
+| `--remote-port <port>` | 远程服务器监听端口 |
+
+### 安全
+
+- 密码使用 PBKDF2-SHA256 (100k 轮) + 随机盐哈希存储
+- JWT Secret 自动生成 256-bit 随机值，存储于本地文件
+- 本地 Tauri WebView 访问完全不受影响，无需登录
+- JWT 7 天过期，过期后需重新登录
+- HTTP 明文传输仅限局域网内使用；公网访问建议搭配反向代理 + HTTPS
+
+### 开发测试
+
+远程开发模式使用 Vite 代理模拟远程访问场景：
+
+```bash
+# 启动本地 API 服务器
+SERVER_PORT=3456 bun run src/server/index.ts
+
+# 启动远程开发前端（监听 0.0.0.0）
+cd desktop && bun run dev:remote
+```
+
+局域网设备访问 `http://<host-ip>:1420` 即可测试前端登录流程。
+
+---
 ## 工具检查
 
 `ToolInspection` 页面，查看当前会话中可用的工具列表和详情。

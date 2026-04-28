@@ -51,6 +51,7 @@ export function Settings() {
             <TabButton icon="tune" label={t('settings.tab.general')} active={activeTab === 'general'} onClick={() => setActiveTab('general')} />
             <TabButton icon="chat" label={t('settings.tab.adapters')} active={activeTab === 'adapters'} onClick={() => setActiveTab('adapters')} />
             <TabButton icon="terminal" label={t('settings.tab.terminal')} active={activeTab === 'terminal'} onClick={() => setActiveTab('terminal')} />
+            <TabButton icon="wifi" label={t('settings.tab.remoteAccess')} active={activeTab === 'remoteAccess'} onClick={() => setActiveTab('remoteAccess')} />
             <TabButton icon="dns" label={t('settings.tab.mcp')} active={activeTab === 'mcp'} onClick={() => setActiveTab('mcp')} />
             <TabButton icon="smart_toy" label={t('settings.tab.agents')} active={activeTab === 'agents'} onClick={() => setActiveTab('agents')} />
             <TabButton icon="auto_awesome" label={t('settings.tab.skills')} active={activeTab === 'skills'} onClick={() => setActiveTab('skills')} />
@@ -69,6 +70,7 @@ export function Settings() {
           {activeTab === 'general' && <GeneralSettings />}
           {activeTab === 'adapters' && <AdapterSettings />}
           {activeTab === 'terminal' && <TerminalSettings />}
+          {activeTab === 'remoteAccess' && <RemoteAccessSettings />}
           {activeTab === 'mcp' && <McpSettings />}
           {activeTab === 'agents' && <AgentsSettings />}
           {activeTab === 'skills' && <SkillSettings />}
@@ -1367,6 +1369,127 @@ function PluginSettings() {
         {t('settings.plugins.description')}
       </p>
       <PluginList />
+    </div>
+  )
+}
+
+// ─── Remote Access Settings ──────────────────────────────────────
+
+function RemoteAccessSettings() {
+  const {
+    remoteAccessEnabled,
+    remoteAccessHost,
+    remoteAccessPort,
+    remoteAccessHasPassword,
+    setRemoteAccessEnabled,
+    setRemoteAccessHost,
+    setRemoteAccessPort,
+    setRemoteAccessPassword,
+  } = useSettingsStore()
+  const t = useTranslation()
+  const [password, setPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleToggle = async (enabled: boolean) => {
+    setSaving(true)
+    try {
+      await setRemoteAccessEnabled(enabled)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSavePassword = async () => {
+    if (!password.trim()) return
+    setSaving(true)
+    try {
+      await setRemoteAccessPassword(password.trim())
+      setPassword('')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePortChange = async (value: number) => {
+    await setRemoteAccessPort(value)
+  }
+
+  const handleHostChange = async (value: string) => {
+    await setRemoteAccessHost(value)
+  }
+
+  return (
+    <div className="max-w-xl">
+      <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-1">{t('settings.remoteAccess.title')}</h2>
+      <p className="text-sm text-[var(--color-text-tertiary)] mb-4">{t('settings.remoteAccess.description')}</p>
+
+      <label className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3 cursor-pointer hover:border-[var(--color-border-focus)] transition-colors mb-4">
+        <input
+          type="checkbox"
+          checked={remoteAccessEnabled}
+          onChange={(e) => void handleToggle(e.target.checked)}
+          disabled={saving}
+          className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-[var(--color-text-primary)]">{t('settings.remoteAccess.enable')}</div>
+          <div className="text-xs text-[var(--color-text-tertiary)] mt-1">{t('settings.remoteAccess.enableHint')}</div>
+        </div>
+      </label>
+
+      {remoteAccessEnabled && (
+        <>
+          <div className="mb-4">
+            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.remoteAccess.host')}</label>
+            <input
+              type="text"
+              value={remoteAccessHost}
+              onChange={(e) => void handleHostChange(e.target.value)}
+              className="w-48 text-sm px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-border-focus)]"
+            />
+            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{t('settings.remoteAccess.hostHint')}</p>
+          </div>
+
+          <div className="mb-4">
+            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.remoteAccess.port')}</label>
+            <input
+              type="number"
+              value={remoteAccessPort}
+              onChange={(e) => void handlePortChange(parseInt(e.target.value) || 8080)}
+              className="w-32 text-sm px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-border-focus)]"
+            />
+            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{t('settings.remoteAccess.portHint')}</p>
+          </div>
+
+          <div className="mb-4">
+            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">
+              {remoteAccessHasPassword ? t('settings.remoteAccess.resetPassword') : t('settings.remoteAccess.setPassword')}
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t('settings.remoteAccess.passwordPlaceholder')}
+                className="flex-1 text-sm px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-border-focus)]"
+              />
+              <Button onClick={handleSavePassword} disabled={!password.trim() || saving} loading={saving}>
+                {t('common.save')}
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">{t('settings.remoteAccess.passwordHint')}</p>
+          </div>
+
+          {remoteAccessHasPassword && (
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3">
+              <div className="text-sm font-medium text-[var(--color-text-primary)] mb-1">{t('settings.remoteAccess.status')}</div>
+              <div className="text-xs text-[var(--color-text-tertiary)]">
+                {t('settings.remoteAccess.statusHint', { host: remoteAccessHost, port: String(remoteAccessPort) })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

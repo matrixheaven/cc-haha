@@ -465,6 +465,23 @@ export const zh: Record<TranslationKey, string> = {
   'settings.computerUse.flagClipboard': '剪贴板访问',
   'settings.computerUse.flagSystemKeys': '系统快捷键',
 
+  // Settings > Remote Access
+  'settings.tab.remoteAccess': '远程访问',
+  'settings.remoteAccess.title': '远程访问',
+  'settings.remoteAccess.description': '允许局域网内的其他设备通过浏览器访问此桌面端。',
+  'settings.remoteAccess.enable': '启用远程访问',
+  'settings.remoteAccess.enableHint': '开启后立即生效，同一网络下的手机或其他电脑可以访问此应用。',
+  'settings.remoteAccess.host': '绑定地址',
+  'settings.remoteAccess.hostHint': '默认 0.0.0.0（监听所有网卡），可改为具体 IP 如 192.168.1.100。',
+  'settings.remoteAccess.port': '监听端口',
+  'settings.remoteAccess.portHint': '默认 8080，修改后立即生效。',
+  'settings.remoteAccess.setPassword': '设置访问密码',
+  'settings.remoteAccess.resetPassword': '重置访问密码',
+  'settings.remoteAccess.passwordPlaceholder': '输入至少 6 位密码',
+  'settings.remoteAccess.passwordHint': '远程设备访问时需要输入此密码。',
+  'settings.remoteAccess.status': '远程访问已启用',
+  'settings.remoteAccess.statusHint': '服务运行在 http://{host}:{port}，配置变更即时生效。',
+
   // Settings > General
   'settings.general.appearanceTitle': '配色主题',
   'settings.general.appearanceDescription': '在亮色与暗色工作区之间切换，不影响原有亮色主题。',
@@ -482,6 +499,15 @@ export const zh: Record<TranslationKey, string> = {
   'settings.general.webFetchPreflightDescription': '桌面端默认跳过 Claude 的域名预检，避免第三方服务商或受限网络下出现误报失败。',
   'settings.general.webFetchPreflightEnabled': '跳过 WebFetch 域名预检',
   'settings.general.webFetchPreflightHint': '只有在你明确需要恢复上游默认安全预检时，才建议关闭这个选项。',
+
+  // ─── Login ──────────────────────────────────────
+  'login.title': 'Claude Code Haha',
+  'login.subtitle': '请输入访问密码以继续',
+  'login.password': '访问密码',
+  'login.passwordPlaceholder': '输入密码',
+  'login.submit': '登录',
+  'login.invalidPassword': '密码错误',
+  'login.remoteNotConfigured': '远程访问未配置',
 
   // ─── Empty Session ──────────────────────────────────────
   'empty.title': '新建会话',

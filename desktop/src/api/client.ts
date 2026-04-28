@@ -49,6 +49,14 @@ async function request<T>(method: string, path: string, body?: unknown, options?
     'Content-Type': 'application/json',
   }
 
+  // Auto-inject remote access JWT
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('cc-haha-remote-auth')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+
   const controller = new AbortController()
   const timeoutMs = options?.timeout ?? 30_000
   const timeout = setTimeout(() => controller.abort(), timeoutMs)

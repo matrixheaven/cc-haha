@@ -39,6 +39,7 @@ export type SettingsTab =
   | 'skills'
   | 'plugins'
   | 'computerUse'
+  | 'remoteAccess'
   | 'about'
 
 type ActiveView = 'code' | 'scheduled' | 'terminal' | 'history' | 'settings'

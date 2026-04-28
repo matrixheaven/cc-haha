@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:remote": "vite --host 0.0.0.0 --port 1420",
     "build": "tsc -b && vite build",
     "build:sidecars": "bun run ./scripts/build-sidecars.ts",
     "build:macos-arm64": "bash ./scripts/build-macos-arm64.sh",

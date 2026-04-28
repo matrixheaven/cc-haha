@@ -24,6 +24,10 @@ type SettingsStore = {
   locale: Locale
   theme: ThemeMode
   skipWebFetchPreflight: boolean
+  remoteAccessEnabled: boolean
+  remoteAccessHost: string
+  remoteAccessPort: number
+  remoteAccessHasPassword: boolean
   isLoading: boolean
   error: string | null
 
@@ -34,6 +38,10 @@ type SettingsStore = {
   setLocale: (locale: Locale) => void
   setTheme: (theme: ThemeMode) => Promise<void>
   setSkipWebFetchPreflight: (enabled: boolean) => Promise<void>
+  setRemoteAccessEnabled: (enabled: boolean) => Promise<void>
+  setRemoteAccessHost: (host: string) => Promise<void>
+  setRemoteAccessPort: (port: number) => Promise<void>
+  setRemoteAccessPassword: (password: string) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -45,18 +53,23 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   locale: getStoredLocale(),
   theme: useUIStore.getState().theme,
   skipWebFetchPreflight: true,
+  remoteAccessEnabled: false,
+  remoteAccessHost: '0.0.0.0',
+  remoteAccessPort: 8080,
+  remoteAccessHasPassword: false,
   isLoading: false,
   error: null,
 
   fetchAll: async () => {
     set({ isLoading: true, error: null })
     try {
-      const [{ mode }, modelsRes, { model }, { level }, userSettings] = await Promise.all([
+      const [{ mode }, modelsRes, { model }, { level }, userSettings, remoteAccess] = await Promise.all([
         settingsApi.getPermissionMode(),
         modelsApi.list(),
         modelsApi.getCurrent(),
         modelsApi.getEffort(),
         settingsApi.getUser(),
+        settingsApi.getRemoteAccess(),
       ])
       const theme = userSettings.theme === 'dark' ? 'dark' : 'light'
       useUIStore.getState().setTheme(theme)
@@ -68,6 +81,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         effortLevel: level,
         theme,
         skipWebFetchPreflight: userSettings.skipWebFetchPreflight !== false,
+        remoteAccessEnabled: remoteAccess.enabled,
+        remoteAccessHost: remoteAccess.host || '0.0.0.0',
+        remoteAccessPort: remoteAccess.port,
+        remoteAccessHasPassword: remoteAccess.hasPassword,
         isLoading: false,
         error: null,
       })
@@ -130,5 +147,41 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch {
       set({ skipWebFetchPreflight: prev })
     }
+  },
+
+  setRemoteAccessEnabled: async (enabled) => {
+    const prev = get().remoteAccessEnabled
+    set({ remoteAccessEnabled: enabled })
+    try {
+      await settingsApi.updateRemoteAccess({ enabled })
+    } catch {
+      set({ remoteAccessEnabled: prev })
+    }
+  },
+
+  setRemoteAccessHost: async (host) => {
+    const prev = get().remoteAccessHost
+    set({ remoteAccessHost: host })
+    try {
+      await settingsApi.updateRemoteAccess({ host })
+    } catch {
+      set({ remoteAccessHost: prev })
+    }
+  },
+
+  setRemoteAccessPort: async (port) => {
+    const prev = get().remoteAccessPort
+    set({ remoteAccessPort: port })
+    try {
+      await settingsApi.updateRemoteAccess({ port })
+    } catch {
+      set({ remoteAccessPort: prev })
+    }
+  },
+
+  setRemoteAccessPassword: async (password) => {
+    try {
+      await settingsApi.updateRemoteAccess({ password })
+    } catch { /* noop */ }
   },
 }))

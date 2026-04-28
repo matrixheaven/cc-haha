@@ -13,6 +13,7 @@
 import { SettingsService } from '../services/settingsService.js'
 import { ApiError, errorResponse } from '../middleware/errorHandler.js'
 import { ensureDesktopCliLauncherInstalled } from '../services/desktopCliLauncherService.js'
+import { remoteAccessService } from '../services/remoteAccessService.js'
 
 const settingsService = new SettingsService()
 
@@ -51,6 +52,9 @@ export async function handleSettingsApi(
       case 'cli-launcher':
         if (method !== 'GET') throw methodNotAllowed(method)
         return Response.json(await ensureDesktopCliLauncherInstalled())
+
+      case 'remote-access':
+        return await handleRemoteAccessSettings(req)
 
       default:
         throw ApiError.notFound(`Unknown settings endpoint: ${sub}`)
@@ -119,6 +123,51 @@ async function parseJsonBody(req: Request): Promise<Record<string, unknown>> {
   } catch {
     throw ApiError.badRequest('Invalid JSON body')
   }
+}
+
+async function handleRemoteAccessSettings(req: Request): Promise<Response> {
+  if (req.method === 'GET') {
+    const config = await remoteAccessService.getConfig()
+    return Response.json({
+      enabled: config.enabled,
+      host: config.host || '0.0.0.0',
+      port: config.port,
+      hasPassword: !!config.passwordHash,
+    })
+  }
+  if (req.method === 'PUT') {
+    const body = await parseJsonBody(req)
+    let configChanged = false
+
+    if (typeof body.enabled === 'boolean') {
+      await remoteAccessService.saveConfig({ enabled: body.enabled })
+      configChanged = true
+    }
+    if (typeof body.host === 'string') {
+      await remoteAccessService.saveConfig({ host: body.host })
+      configChanged = true
+    }
+    if (typeof body.port === 'number') {
+      await remoteAccessService.saveConfig({ port: body.port })
+      configChanged = true
+    }
+    if (typeof body.password === 'string') {
+      const hash = remoteAccessService.hashPassword(body.password)
+      await remoteAccessService.saveConfig({ passwordHash: hash })
+    }
+
+    // Dynamically restart the remote server so changes take effect immediately
+    if (configChanged) {
+      import('../remoteServer.js').then(({ restartRemoteServer }) => {
+        restartRemoteServer().catch((err) => {
+          console.error('[Remote] Failed to restart remote server:', err)
+        })
+      })
+    }
+
+    return Response.json({ ok: true })
+  }
+  throw methodNotAllowed(req.method)
 }
 
 function methodNotAllowed(method: string): ApiError {
